@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { PurchaseForm } from '@/components/inventory/purchase-form'
 import { MobileContainer } from '@/components/inventory/mobile-container'
@@ -15,7 +15,7 @@ import {
   updatePurchaseRecord,
 } from '@/lib/inventory-store'
 
-export default function PurchasePage() {
+function PurchaseContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const productId = searchParams.get('productId')
@@ -89,23 +89,35 @@ export default function PurchasePage() {
 
   if (isLoading) {
     return (
-      <MobileContainer>
-        <div className="flex h-screen items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
-      </MobileContainer>
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
     )
   }
 
   return (
+    <PurchaseForm
+      existingProduct={existingProduct}
+      editingRecord={editingRecord}
+      categories={categories}
+      onSave={handleSave}
+      onClose={() => router.back()}
+    />
+  )
+}
+
+export default function PurchasePage() {
+  return (
     <MobileContainer>
-      <PurchaseForm
-        existingProduct={existingProduct}
-        editingRecord={editingRecord}
-        categories={categories}
-        onSave={handleSave}
-        onClose={() => router.back()}
-      />
+      <Suspense
+        fallback={
+          <div className="flex h-screen items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        }
+      >
+        <PurchaseContent />
+      </Suspense>
     </MobileContainer>
   )
 }
