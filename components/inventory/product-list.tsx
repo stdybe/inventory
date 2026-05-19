@@ -1,6 +1,6 @@
 'use client'
 
-import { Product, getLowestPriceWithSite, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, UNITS, getUnitLabel } from '@/lib/inventory-store'
+import { Product, getLowestPriceWithSite, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount } from '@/lib/inventory-store'
 import { Package, ChevronRight, TrendingDown, CalendarDays } from 'lucide-react'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'

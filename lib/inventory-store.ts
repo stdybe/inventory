@@ -71,7 +71,7 @@ const STORAGE_KEY = 'inventory-data-v3'
 
 const defaultCategories = ['화장품', '핸드크림', '립밤', '브레스 케어', '샤워', '생리', '약', '청소', '식품', '의류', '전자기기', '사무용품', '공구', '기타']
 
-export function generateId(): string {
+function generateId(): string {
   return Math.random().toString(36).substring(2, 15)
 }
 
@@ -146,9 +146,24 @@ export function getInventoryData(): InventoryStore {
   return { products: [], categories: defaultCategories }
 }
 
-export function saveInventoryData(data: InventoryStore): void {
+function saveInventoryData(data: InventoryStore): void {
   if (typeof window === 'undefined') return
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+}
+
+export function getProductById(id: string): Product | undefined {
+  const data = getInventoryData()
+  return data.products.find(p => p.id === id)
+}
+
+export function getPurchaseRecordById(productId: string, recordId: string): PurchaseRecord | undefined {
+  const product = getProductById(productId)
+  if (!product) return undefined
+  for (const entry of product.stockEntries) {
+    const record = entry.purchaseHistory.find(r => r.id === recordId)
+    if (record) return record
+  }
+  return undefined
 }
 
 export function searchProductsByName(query: string): Product[] {
@@ -158,11 +173,6 @@ export function searchProductsByName(query: string): Product[] {
   return data.products.filter(p => 
     p.name.toLowerCase().includes(lowerQuery)
   )
-}
-
-export function getProductByName(name: string): Product | undefined {
-  const data = getInventoryData()
-  return data.products.find(p => p.name.toLowerCase() === name.toLowerCase())
 }
 
 export function addPurchaseToProduct(
@@ -390,31 +400,6 @@ export function deleteProduct(productId: string): boolean {
   return true
 }
 
-export function deleteStockEntry(productId: string, unit: Unit): Product | null {
-  const data = getInventoryData()
-  const product = data.products.find(p => p.id === productId)
-  if (!product) return null
-  
-  const entryIndex = product.stockEntries.findIndex(se => se.unit === unit)
-  if (entryIndex === -1) return null
-  
-  product.stockEntries.splice(entryIndex, 1)
-  
-  // If no more stock entries, delete the product
-  if (product.stockEntries.length === 0) {
-    const productIndex = data.products.findIndex(p => p.id === productId)
-    if (productIndex !== -1) {
-      data.products.splice(productIndex, 1)
-    }
-    saveInventoryData(data)
-    return null
-  }
-  
-  product.updatedAt = new Date().toISOString()
-  saveInventoryData(data)
-  return product
-}
-
 export function updatePurchaseRecord(
   productId: string,
   purchaseRecordId: string,
@@ -512,14 +497,6 @@ export function updatePurchaseRecord(
   return product
 }
 
-export function addCategory(category: string): void {
-  const data = getInventoryData()
-  if (!data.categories.includes(category)) {
-    data.categories.push(category)
-    saveInventoryData(data)
-  }
-}
-
 // Get total count of products (based on current quantity / volume)
 export function getTotalCount(product: Product): number {
   return product.stockEntries.reduce((sum, entry) => {
@@ -530,7 +507,7 @@ export function getTotalCount(product: Product): number {
 }
 
 // Get total quantity across all units (for main page display)
-export function getTotalQuantity(product: Product): number {
+function getTotalQuantity(product: Product): number {
   return product.stockEntries.reduce((sum, entry) => sum + entry.quantity, 0)
 }
 
@@ -587,7 +564,7 @@ export function getTotalPurchaseValue(product: Product): number {
 }
 
 // Get latest price
-export function getLatestPrice(product: Product): number | null {
+function getLatestPrice(product: Product): number | null {
   let latestRecord: PurchaseRecord | null = null
   
   product.stockEntries.forEach(entry => {

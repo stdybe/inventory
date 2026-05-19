@@ -216,9 +216,8 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
     purchaseDate !== undefined
 
   return (
-    <div className="fixed inset-0 z-[60] bg-background">
-      <div className="flex h-full flex-col">
-        <header className="flex items-center justify-between border-b border-border px-4 py-4">
+    <div className="flex h-screen flex-col bg-background">
+      <header className="flex items-center justify-between border-b border-border px-4 py-4">
           <button onClick={onClose} className="p-1">
             <X className="h-6 w-6 text-foreground" />
           </button>
@@ -498,6 +497,5 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
           </div>
         </form>
       </div>
-    </div>
-  )
-}
+    )
+  }

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { X, Trash2, TrendingDown, Package, ChevronDown, ChevronUp, Plus, Pencil, Minus, CalendarX } from 'lucide-react'
-import { Product, StockEntry, Unit, UNITS, getLowestPrice, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, PurchaseRecord, getUnitLabel } from '@/lib/inventory-store'
+import { Product, StockEntry, Unit, getLowestPrice, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, PurchaseRecord, getUnitLabel } from '@/lib/inventory-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -73,9 +73,8 @@ export function ProductDetail({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-background">
-      <div className="flex h-full flex-col">
-        <header className="flex items-center justify-between border-b border-border px-4 py-4">
+    <div className="flex h-screen flex-col bg-background">
+      <header className="flex items-center justify-between border-b border-border px-4 py-4">
           <button onClick={onClose} className="p-1">
             <X className="h-6 w-6 text-foreground" />
           </button>
@@ -152,9 +151,9 @@ export function ProductDetail({
                 return (
                   <div key={entryKey} className="rounded-xl bg-card overflow-hidden">
                     {/* Unit Header */}
-                    <button
+                    <div
                       onClick={() => toggleExpand(entry.unit, entry.volume)}
-                      className="flex w-full items-center justify-between p-4 text-left"
+                      className="flex w-full items-center justify-between p-4 text-left cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
                         <Badge variant="outline">{unitLabel}</Badge>
@@ -198,7 +197,7 @@ export function ProductDetail({
                       ) : (
                         <ChevronDown className="h-5 w-5 text-muted-foreground" />
                       )}
-                    </button>
+                    </div>
 
                     {/* Purchase History */}
                     {isExpanded && (
@@ -374,6 +373,5 @@ export function ProductDetail({
           </AlertDialog>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
