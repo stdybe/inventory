@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { format } from 'date-fns'
 import { Product, UNITS, Unit, PURCHASE_SITES, searchProductsByName, PurchaseRecord } from '@/lib/inventory-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { X, Check, Plus } from 'lucide-react'
+import { X, Check, Plus, ImagePlus } from 'lucide-react'
 import { DatePicker } from './date-picker'
 
 interface PurchaseBatch {
@@ -35,6 +36,8 @@ interface PurchaseFormProps {
     expirationDate?: string // for editing existing single record
     site: string
     batches: { count: number; expirationDate?: string }[]
+    imageFile?: File
+    memo?: string
   }) => void
   onClose: () => void
 }
@@ -43,7 +46,22 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
   const [productName, setProductName] = useState(existingProduct?.name || '')
   const [category, setCategory] = useState(existingProduct?.category || '')
   const [unit, setUnit] = useState<Unit>(editingRecord?.unit || 'pcs')
-  
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string>(existingProduct?.imageUrl || '')
+  const [memo, setMemo] = useState(editingRecord?.memo || '')
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImageFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   // Batches for multiple expiration dates
   const [batches, setBatches] = useState<PurchaseBatch[]>(() => {
     if (editingRecord) {
@@ -197,13 +215,15 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
       unit,
       volume: parseFloat(volume) || 1,
       price: parseFloat(price) || 0,
-      purchaseDate: purchaseDate.toISOString(),
-      expirationDate: batches[0].expirationDate?.toISOString(),
+      purchaseDate: format(purchaseDate, 'yyyy-MM-dd'),
+      expirationDate: batches[0].expirationDate ? format(batches[0].expirationDate, 'yyyy-MM-dd') : undefined,
       site: finalSite,
       batches: batches.map(b => ({
         count: parseFloat(b.count) || 0,
-        expirationDate: b.expirationDate?.toISOString(),
-      }))
+        expirationDate: b.expirationDate ? format(b.expirationDate, 'yyyy-MM-dd') : undefined,
+      })),
+      imageFile: imageFile || undefined,
+      memo: memo || undefined
     })
   }
 
@@ -229,6 +249,31 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
 
         <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-y-auto">
           <div className="flex flex-col gap-4 p-4">
+            {/* Image Upload */}
+            <div className="flex flex-col items-center gap-2">
+              <Label className="self-start">상품 이미지</Label>
+              <div 
+                className="relative h-32 w-32 cursor-pointer overflow-hidden rounded-xl border-2 border-dashed border-border bg-secondary/30 transition-colors hover:bg-secondary/50"
+                onClick={() => document.getElementById('image-upload')?.click()}
+              >
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+                    <ImagePlus className="h-8 w-8" />
+                    <span className="text-xs mt-1">이미지 추가</span>
+                  </div>
+                )}
+              </div>
+              <input
+                id="image-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageChange}
+              />
+            </div>
+
             {/* Product Name with Search */}
             <div className="flex flex-col gap-2">
               <Label htmlFor="productName">상품명</Label>
@@ -243,7 +288,7 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
                 />
                 {selectedExisting && !existingProduct && (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <div className="flex items-center gap-1 text-xs text-accent">
+                    <div className="flex items-center gap-1 text-xs text-primary">
                       <Check className="h-3 w-3" />
                       <span>기존 상품</span>
                     </div>
@@ -485,6 +530,18 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="0"
                 min="0"
+                className="bg-card"
+              />
+            </div>
+
+            {/* Memo */}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="memo">메모 (선택)</Label>
+              <Input
+                id="memo"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                placeholder="구매 관련 메모를 입력하세요"
                 className="bg-card"
               />
             </div>

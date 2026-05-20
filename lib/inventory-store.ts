@@ -4,11 +4,31 @@ import { SupabaseClient } from '@supabase/supabase-js'
 export type Unit = 'pcs' | 'kg' | 'g' | 'l' | 'ml'
 
 export const UNITS: { value: Unit; label: string }[] = [
+  { value: 'pcs', label: '개' },
   { value: 'kg', label: 'kg' },
   { value: 'g', label: 'g' },
   { value: 'l', label: 'l' },
   { value: 'ml', label: 'ml' },
 ]
+
+export function getNormalizedPrice(price: number, volume: number, unit: Unit): { normalizedPrice: number; label: string } {
+  // Ignore gift items (price 0)
+  if (price <= 0) return { normalizedPrice: Infinity, label: '' }
+
+  switch (unit) {
+    case 'ml':
+      return { normalizedPrice: (price / volume) * 10, label: '10ml당' }
+    case 'l':
+      return { normalizedPrice: (price / (volume * 1000)) * 10, label: '10ml당' }
+    case 'g':
+      return { normalizedPrice: (price / volume) * 10, label: '10g당' }
+    case 'kg':
+      return { normalizedPrice: (price / (volume * 1000)) * 10, label: '10g당' }
+    case 'pcs':
+    default:
+      return { normalizedPrice: price / volume, label: '개당' }
+  }
+}
 
 export function getUnitLabel(unit: Unit): string {
   if (unit === 'pcs') return '개'
@@ -16,7 +36,9 @@ export function getUnitLabel(unit: Unit): string {
 }
 
 export const PURCHASE_SITES = [
-  '오프라인',
+  '다이소',
+  '마트(오프라인)',
+  '편의점',
   '네이버',
   '쿠팡',
   '11번가',
@@ -46,6 +68,7 @@ export interface PurchaseRecord {
   purchaseDate: string
   expirationDate?: string
   site: string
+  memo?: string
   createdAt: string
 }
 
@@ -60,6 +83,9 @@ export interface Product {
   id: string
   name: string
   category: string
+  imageUrl?: string
+  isHidden: boolean
+  ignoreOutOfStock: boolean
   stockEntries: StockEntry[]
   createdAt: string
   updatedAt: string
@@ -71,6 +97,50 @@ export interface InventoryStore {
 }
 
 const defaultCategories = ['화장품', '핸드크림', '립밤', '브레스 케어', '샤워', '생리', '약', '청소', '식품', '의류', '전자기기', '사무용품', '공구', '기타']
+
+function mapProduct(p: any): Product {
+  const records: PurchaseRecord[] = (p.purchase_records || []).map((r: any) => ({
+    id: r.id,
+    price: r.price,
+    count: r.count,
+    volume: r.volume,
+    unit: r.unit,
+    quantity: r.quantity,
+    remainingQuantity: r.remaining_quantity,
+    purchaseDate: r.purchase_date,
+    expirationDate: r.expiration_date,
+    site: r.site,
+    memo: r.memo,
+    createdAt: r.created_at,
+    }))
+  const stockEntriesMap = new Map<string, StockEntry>()
+  records.forEach(r => {
+    const key = `${r.unit}-${r.volume}`
+    if (!stockEntriesMap.has(key)) {
+      stockEntriesMap.set(key, {
+        unit: r.unit,
+        volume: r.volume,
+        quantity: 0,
+        purchaseHistory: [],
+      })
+    }
+    const entry = stockEntriesMap.get(key)!
+    entry.quantity += r.remainingQuantity
+    entry.purchaseHistory.push(r)
+  })
+
+  return {
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    imageUrl: p.image_url,
+    isHidden: p.is_hidden || false,
+    ignoreOutOfStock: p.ignore_out_of_stock || false,
+    stockEntries: Array.from(stockEntriesMap.values()),
+    createdAt: p.created_at,
+    updatedAt: p.updated_at,
+  }
+}
 
 export async function searchProductsByName(query: string): Promise<Product[]> {
   const supabase = createClient()
@@ -84,46 +154,7 @@ export async function searchProductsByName(query: string): Promise<Product[]> {
 
   if (error || !productsData) return []
 
-  return productsData.map((p: any) => {
-    const records: PurchaseRecord[] = p.purchase_records.map((r: any) => ({
-      id: r.id,
-      price: r.price,
-      count: r.count,
-      volume: r.volume,
-      unit: r.unit,
-      quantity: r.quantity,
-      remainingQuantity: r.remaining_quantity,
-      purchaseDate: r.purchase_date,
-      expirationDate: r.expiration_date,
-      site: r.site,
-      createdAt: r.created_at,
-    }))
-
-    const stockEntriesMap = new Map<string, StockEntry>()
-    records.forEach(r => {
-      const key = `${r.unit}-${r.volume}`
-      if (!stockEntriesMap.has(key)) {
-        stockEntriesMap.set(key, {
-          unit: r.unit,
-          volume: r.volume,
-          quantity: 0,
-          purchaseHistory: [],
-        })
-      }
-      const entry = stockEntriesMap.get(key)!
-      entry.quantity += r.remainingQuantity
-      entry.purchaseHistory.push(r)
-    })
-
-    return {
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      stockEntries: Array.from(stockEntriesMap.values()),
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-    }
-  })
+  return productsData.map(mapProduct)
 }
 
 export async function getInventoryData(): Promise<InventoryStore> {
@@ -141,47 +172,7 @@ export async function getInventoryData(): Promise<InventoryStore> {
     return { products: [], categories: defaultCategories }
   }
 
-  const products: Product[] = productsData.map((p: any) => {
-    // Group purchase records into stock entries
-    const records: PurchaseRecord[] = p.purchase_records.map((r: any) => ({
-      id: r.id,
-      price: r.price,
-      count: r.count,
-      volume: r.volume,
-      unit: r.unit,
-      quantity: r.quantity,
-      remainingQuantity: r.remaining_quantity,
-      purchaseDate: r.purchase_date,
-      expirationDate: r.expiration_date,
-      site: r.site,
-      createdAt: r.created_at,
-    }))
-
-    const stockEntriesMap = new Map<string, StockEntry>()
-    records.forEach(r => {
-      const key = `${r.unit}-${r.volume}`
-      if (!stockEntriesMap.has(key)) {
-        stockEntriesMap.set(key, {
-          unit: r.unit,
-          volume: r.volume,
-          quantity: 0,
-          purchaseHistory: [],
-        })
-      }
-      const entry = stockEntriesMap.get(key)!
-      entry.quantity += r.remainingQuantity
-      entry.purchaseHistory.push(r)
-    })
-
-    return {
-      id: p.id,
-      name: p.name,
-      category: p.category,
-      stockEntries: Array.from(stockEntriesMap.values()),
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-    }
-  })
+  const products = productsData.map(mapProduct)
 
   // Extract unique categories
   const categoriesSet = new Set(defaultCategories)
@@ -207,45 +198,32 @@ export async function getProductById(id: string): Promise<Product | undefined> {
     .single()
 
   if (error || !p) return undefined
+  return mapProduct(p)
+}
 
-  const records: PurchaseRecord[] = p.purchase_records.map((r: any) => ({
-    id: r.id,
-    price: r.price,
-    count: r.count,
-    volume: r.volume,
-    unit: r.unit,
-    quantity: r.quantity,
-    remainingQuantity: r.remaining_quantity,
-    purchaseDate: r.purchase_date,
-    expirationDate: r.expiration_date,
-    site: r.site,
-    createdAt: r.created_at,
-  }))
+export async function uploadProductImage(file: File): Promise<string | null> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
 
-  const stockEntriesMap = new Map<string, StockEntry>()
-  records.forEach(r => {
-    const key = `${r.unit}-${r.volume}`
-    if (!stockEntriesMap.has(key)) {
-      stockEntriesMap.set(key, {
-        unit: r.unit,
-        volume: r.volume,
-        quantity: 0,
-        purchaseHistory: [],
-      })
-    }
-    const entry = stockEntriesMap.get(key)!
-    entry.quantity += r.remainingQuantity
-    entry.purchaseHistory.push(r)
-  })
+  const fileExt = file.name.split('.').pop()
+  const fileName = `${user.id}/${Math.random().toString(36).substring(2)}.${fileExt}`
+  const filePath = fileName
 
-  return {
-    id: p.id,
-    name: p.name,
-    category: p.category,
-    stockEntries: Array.from(stockEntriesMap.values()),
-    createdAt: p.created_at,
-    updatedAt: p.updated_at,
+  const { error: uploadError } = await supabase.storage
+    .from('product-images')
+    .upload(filePath, file)
+
+  if (uploadError) {
+    console.error('Error uploading image:', uploadError)
+    return null
   }
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('product-images')
+    .getPublicUrl(filePath)
+
+  return publicUrl
 }
 
 export async function addPurchaseToProduct(
@@ -257,7 +235,9 @@ export async function addPurchaseToProduct(
   price: number,
   purchaseDate: string,
   site: string,
-  expirationDate?: string
+  expirationDate?: string,
+  imageUrl?: string,
+  memo?: string
 ): Promise<Product | null> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -282,6 +262,7 @@ export async function addPurchaseToProduct(
         name: productName,
         category: category,
         user_id: user.id,
+        image_url: imageUrl,
       })
       .select('id')
       .single()
@@ -292,8 +273,10 @@ export async function addPurchaseToProduct(
     }
     product = newProduct
   } else {
-    // Update category if it changed
-    await supabase.from('products').update({ category }).eq('id', product.id)
+    // Update category and image if changed
+    const updates: any = { category }
+    if (imageUrl) updates.image_url = imageUrl
+    await supabase.from('products').update(updates).eq('id', product.id)
   }
 
   const totalQuantity = count * volume
@@ -311,6 +294,7 @@ export async function addPurchaseToProduct(
       purchase_date: purchaseDate,
       expiration_date: expirationDate || null,
       site,
+      memo: memo || null,
     })
 
   if (recordError) {
@@ -402,15 +386,20 @@ export async function updatePurchaseRecord(
     purchaseDate: string
     expirationDate?: string
     site: string
+    imageUrl?: string
+    memo?: string
   }
 ): Promise<Product | null> {
   const supabase = createClient()
   
   // 1. Update product info
-  await supabase.from('products').update({
+  const productUpdates: any = {
     name: updates.productName,
     category: updates.category
-  }).eq('id', productId)
+  }
+  if (updates.imageUrl) productUpdates.image_url = updates.imageUrl
+
+  await supabase.from('products').update(productUpdates).eq('id', productId)
 
   // 2. Fetch old record to calculate remaining quantity diff
   const { data: oldRecord } = await supabase
@@ -434,6 +423,7 @@ export async function updatePurchaseRecord(
     purchase_date: updates.purchaseDate,
     expiration_date: updates.expirationDate || null,
     site: updates.site,
+    memo: updates.memo || null,
     quantity: newTotalQuantity,
     remaining_quantity: newRemainingQuantity,
   }).eq('id', purchaseRecordId)
@@ -489,15 +479,39 @@ export async function updateStockQuantity(
 
   return getProductById(productId) as any
 }
-export function getLowestPrice(product: Product): number | null {
-  const allPrices: number[] = []
+export interface LowestPriceInfo {
+  price: number
+  normalizedPrice: number
+  unitLabel: string
+  site: string
+}
+
+export function getLowestPriceInfo(product: Product): LowestPriceInfo | null {
+  let lowestNormalizedPrice = Infinity
+  let bestRecord: PurchaseRecord | null = null
+  let bestLabel = ''
+
   product.stockEntries.forEach(entry => {
     entry.purchaseHistory.forEach(record => {
-      allPrices.push(record.price)
+      if (record.price <= 0) return // Ignore gifts/giveaways
+
+      const { normalizedPrice, label } = getNormalizedPrice(record.price, record.volume, record.unit)
+      if (normalizedPrice < lowestNormalizedPrice) {
+        lowestNormalizedPrice = normalizedPrice
+        bestRecord = record
+        bestLabel = label
+      }
     })
   })
-  if (allPrices.length === 0) return null
-  return Math.min(...allPrices)
+
+  if (!bestRecord) return null
+
+  return {
+    price: bestRecord.price,
+    normalizedPrice: lowestNormalizedPrice,
+    unitLabel: bestLabel,
+    site: bestRecord.site
+  }
 }
 
 export function getTotalCount(product: Product): number {
@@ -508,19 +522,6 @@ export function getTotalCount(product: Product): number {
 
 function getTotalQuantity(product: Product): number {
   return product.stockEntries.reduce((sum, entry) => sum + entry.quantity, 0)
-}
-
-export function getLowestPriceWithSite(product: Product): { price: number; site: string } | null {
-  let lowestRecord: PurchaseRecord | null = null
-  product.stockEntries.forEach(entry => {
-    entry.purchaseHistory.forEach(record => {
-      if (!lowestRecord || record.price < lowestRecord.price) {
-        lowestRecord = record
-      }
-    })
-  })
-  if (!lowestRecord) return null
-  return { price: (lowestRecord as any).price, site: (lowestRecord as any).site }
 }
 
 export function getLastPurchaseDate(product: Product): string | null {
@@ -543,9 +544,25 @@ export function getTotalPurchaseValue(product: Product): number {
   }, 0)
 }
 
+export async function updateProductSettings(
+  productId: string,
+  settings: { isHidden?: boolean; ignoreOutOfStock?: boolean }
+): Promise<Product | null> {
+  const supabase = createClient()
+  const updates: any = {}
+  if (settings.isHidden !== undefined) updates.is_hidden = settings.isHidden
+  if (settings.ignoreOutOfStock !== undefined) updates.ignore_out_of_stock = settings.ignoreOutOfStock
+
+  const { error } = await supabase.from('products').update(updates).eq('id', productId)
+  if (error) return null
+
+  return getProductById(productId) as any
+}
+
 export function getStats(products: Product[]) {
-  const totalProducts = products.length
-  const totalValue = products.reduce((sum, product) => {
+  const visibleProducts = products.filter(p => !p.isHidden)
+  const totalProducts = visibleProducts.length
+  const totalValue = visibleProducts.reduce((sum, product) => {
     // For stats, we'll use the latest price * total remaining quantity
     let latestPrice = 0
     let latestDate: Date | null = null
@@ -563,7 +580,8 @@ export function getStats(products: Product[]) {
     const totalQty = getTotalQuantity(product)
     return sum + (latestPrice * totalQty)
   }, 0)
-  const outOfStock = products.filter(p => getTotalCount(p) === 0).length
+
+  const outOfStock = visibleProducts.filter(p => getTotalCount(p) === 0 && !p.ignoreOutOfStock).length
   
   return {
     totalProducts,

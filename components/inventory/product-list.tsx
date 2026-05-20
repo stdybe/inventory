@@ -1,6 +1,6 @@
 'use client'
 
-import { Product, getLowestPriceWithSite, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount } from '@/lib/inventory-store'
+import { Product, getLowestPriceInfo, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount } from '@/lib/inventory-store'
 import { Package, ChevronRight, TrendingDown, CalendarDays } from 'lucide-react'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
@@ -26,7 +26,7 @@ export function ProductList({ products, onProductClick }: ProductListProps) {
   return (
     <div className="flex flex-col gap-2">
       {products.map((product) => {
-        const lowestPriceInfo = getLowestPriceWithSite(product)
+        const lowestPriceInfo = getLowestPriceInfo(product)
         const totalPurchaseValue = getTotalPurchaseValue(product)
         const lastPurchaseDate = getLastPurchaseDate(product)
         const totalCount = getTotalCount(product)
@@ -38,9 +38,14 @@ export function ProductList({ products, onProductClick }: ProductListProps) {
             onClick={() => onProductClick(product)}
             className="flex items-center gap-3 rounded-xl bg-card p-4 text-left transition-colors active:bg-secondary"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-              <Package className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary overflow-hidden">
+              {product.imageUrl ? (
+                <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
+              ) : (
+                <Package className="h-6 w-6 text-muted-foreground" />
+              )}
             </div>
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-medium text-foreground truncate">{product.name}</p>
@@ -65,9 +70,9 @@ export function ProductList({ products, onProductClick }: ProductListProps) {
               <div className="flex items-center gap-2 text-sm mt-1 flex-wrap">
                 <span className="text-foreground font-medium">총 {totalPurchaseValue.toLocaleString('ko-KR')}원</span>
                 {lowestPriceInfo && (
-                  <span className="flex items-center gap-1 text-accent ml-auto">
+                  <span className="flex items-center gap-1 text-primary ml-auto">
                     <TrendingDown className="h-3 w-3" />
-                    {lowestPriceInfo.price.toLocaleString('ko-KR')}원
+                    {Math.round(lowestPriceInfo.normalizedPrice).toLocaleString('ko-KR')}원 ({lowestPriceInfo.unitLabel})
                   </span>
                 )}
               </div>

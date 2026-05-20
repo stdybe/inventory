@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Package } from 'lucide-react'
+import { Plus, Package, Moon, Sun } from 'lucide-react'
+import { useTheme } from 'next-themes'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { MobileContainer } from '@/components/inventory/mobile-container'
@@ -17,14 +18,18 @@ import {
 
 export default function InventoryPage() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [stockFilter, setStockFilter] = useState('all')
+  const [visibilityFilter, setVisibilityFilter] = useState('visible')
 
   useEffect(() => {
+    setMounted(true)
     async function fetchData() {
       const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
@@ -51,24 +56,42 @@ export default function InventoryPage() {
   }
 
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const matchesSearch =
-          product.name.toLowerCase().includes(searchQuery.toLowerCase())
+    return products
+      .filter((product) => {
+        const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase())
+        const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
 
-      const matchesCategory =
-          selectedCategory === 'all' || product.category === selectedCategory
+        // 1. Visibility Filter
+        let matchesVisibility = true
+        if (visibilityFilter === 'visible') {
+          matchesVisibility = !product.isHidden
+        } else if (visibilityFilter === 'hidden') {
+          matchesVisibility = product.isHidden
+        }
+        // if 'all', matchesVisibility stays true
 
-      const totalQty = getTotalCount(product)
-      let matchesStock = true
-      if (stockFilter === 'in-stock') {
-        matchesStock = totalQty > 0
-      } else if (stockFilter === 'out-of-stock') {
-        matchesStock = totalQty === 0
-      }
+        // 2. Stock Filter
+        const totalQty = getTotalCount(product)
+        let matchesStock = true
+        if (stockFilter === 'in-stock') {
+          matchesStock = totalQty > 0
+        } else if (stockFilter === 'out-of-stock') {
+          matchesStock = totalQty === 0 && !product.ignoreOutOfStock
+        }
 
-      return matchesSearch && matchesCategory && matchesStock
-    })
-  }, [products, searchQuery, selectedCategory, stockFilter])
+        return matchesSearch && matchesCategory && matchesVisibility && matchesStock
+      })
+      .sort((a, b) => {
+        // Sort order when multiple types are visible
+        if (visibilityFilter === 'all') {
+          if (a.isHidden !== b.isHidden) return a.isHidden ? 1 : -1
+        }
+        
+        if (a.ignoreOutOfStock !== b.ignoreOutOfStock) return a.ignoreOutOfStock ? 1 : -1
+        
+        return a.name.localeCompare(b.name)
+      })
+  }, [products, searchQuery, selectedCategory, stockFilter, visibilityFilter])
 
   const stats = useMemo(() => getStats(products), [products])
 
@@ -102,6 +125,19 @@ export default function InventoryPage() {
                 <h1 className="text-xl font-semibold text-foreground">Inventory</h1>
               </div>
               <div className="flex items-center gap-2">
+                {mounted && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  >
+                    {theme === 'dark' ? (
+                      <Sun className="h-5 w-5" />
+                    ) : (
+                      <Moon className="h-5 w-5" />
+                    )}
+                  </Button>
+                )}
                 <Button variant="ghost" size="sm" onClick={handleLogout}>
                   로그아웃
                 </Button>
@@ -127,6 +163,8 @@ export default function InventoryPage() {
                   categories={categories}
                   stockFilter={stockFilter}
                   onStockFilterChange={setStockFilter}
+                  showHiddenFilter={visibilityFilter}
+                  onShowHiddenChange={setVisibilityFilter}
               />
 
               <div>

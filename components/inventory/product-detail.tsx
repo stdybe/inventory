@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { X, Trash2, TrendingDown, Package, ChevronDown, ChevronUp, Plus, Pencil, Minus, CalendarX } from 'lucide-react'
-import { Product, StockEntry, Unit, getLowestPrice, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, PurchaseRecord, getUnitLabel } from '@/lib/inventory-store'
+import { X, Trash2, TrendingDown, Package, ChevronDown, ChevronUp, Plus, Pencil, Minus, CalendarX, EyeOff, Eye, BellOff, Bell } from 'lucide-react'
+import { Product, StockEntry, Unit, getLowestPriceInfo, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, PurchaseRecord, getUnitLabel } from '@/lib/inventory-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -29,6 +29,7 @@ interface ProductDetailProps {
   onUpdateStock: (unit: Unit, volume: number, newQuantity: number) => void
   onUseProduct: (unit: Unit, volume: number, quantityToUse: number) => void
   onAddPurchase: () => void
+  onUpdateSettings: (settings: { isHidden?: boolean; ignoreOutOfStock?: boolean }) => void
 }
 
 export function ProductDetail({
@@ -40,14 +41,18 @@ export function ProductDetail({
   onUpdateStock,
   onUseProduct,
   onAddPurchase,
+  onUpdateSettings,
 }: ProductDetailProps) {
   const [expandedUnits, setExpandedUnits] = useState<string>('')
   const [editingStock, setEditingStock] = useState<{ unit: Unit; volume: number; value: string } | null>(null)
 
-  const lowestPrice = getLowestPrice(product)
+  const lowestPriceInfo = getLowestPriceInfo(product)
   const lastPurchaseDate = getLastPurchaseDate(product)
   const totalPurchaseValue = getTotalPurchaseValue(product)
   const totalCount = getTotalCount(product)
+
+  const lastPurchaseDateObj = lastPurchaseDate ? new Date(lastPurchaseDate) : null
+  const isLastPurchaseDateValid = lastPurchaseDateObj && !isNaN(lastPurchaseDateObj.getTime())
 
   const getEntryKey = (unit: Unit, volume: number) => `${unit}-${volume}`
 
@@ -79,19 +84,52 @@ export function ProductDetail({
             <X className="h-6 w-6 text-foreground" />
           </button>
           <h1 className="text-lg font-semibold text-foreground">상품 상세</h1>
-          <div className="w-8" />
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onUpdateSettings({ isHidden: !product.isHidden })}
+              className={product.isHidden ? 'text-primary' : 'text-muted-foreground'}
+              title={product.isHidden ? '숨김 해제' : '상품 숨기기'}
+            >
+              {product.isHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onUpdateSettings({ ignoreOutOfStock: !product.ignoreOutOfStock })}
+              className={product.ignoreOutOfStock ? 'text-primary' : 'text-muted-foreground'}
+              title={product.ignoreOutOfStock ? '알람 켜기' : '소진 알람 끄기'}
+            >
+              {product.ignoreOutOfStock ? <BellOff className="h-5 w-5" /> : <Bell className="h-5 w-5" />}
+            </Button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto">
           {/* Product Header */}
           <div className="border-b border-border p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary">
-                <Package className="h-6 w-6 text-muted-foreground" />
+            <div className="flex items-start gap-4">
+              <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-secondary overflow-hidden">
+                {product.imageUrl ? (
+                  <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Package className="h-10 w-10 text-muted-foreground" />
+                  </div>
+                )}
               </div>
               <div className="flex-1">
-                <h2 className="text-xl font-semibold text-foreground">{product.name}</h2>
-                <p className="text-sm text-muted-foreground">{product.category}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-primary">{product.category}</span>
+                  {totalCount === 0 && (
+                    <Badge variant={product.ignoreOutOfStock ? 'secondary' : 'destructive'}>
+                      소진{product.ignoreOutOfStock && ' (알람끔)'}
+                    </Badge>
+                  )}
+                  {product.isHidden && <Badge variant="secondary">숨김</Badge>}
+                </div>
+                <h1 className="text-2xl font-bold text-foreground mt-1">{product.name}</h1>
               </div>
             </div>
 
@@ -103,19 +141,22 @@ export function ProductDetail({
               </div>
               <div className="rounded-lg bg-card p-3">
                 <p className="text-xs text-muted-foreground">최저 단가</p>
-                <p className="text-lg font-semibold text-accent flex items-center gap-1">
-                  {lowestPrice ? (
+                <div className="text-lg font-semibold text-primary flex items-center gap-1">
+                  {lowestPriceInfo ? (
                     <>
                       <TrendingDown className="h-4 w-4" />
-                      {lowestPrice.toLocaleString('ko-KR')}원
+                      <div className="flex flex-col leading-tight">
+                        <span>{Math.round(lowestPriceInfo.normalizedPrice).toLocaleString('ko-KR')}원</span>
+                        <span className="text-[10px] font-normal text-muted-foreground">({lowestPriceInfo.unitLabel})</span>
+                      </div>
                     </>
                   ) : '-'}
-                </p>
+                </div>
               </div>
               <div className="rounded-lg bg-card p-3">
                 <p className="text-xs text-muted-foreground">마지막 구매일</p>
                 <p className="text-lg font-semibold text-foreground">
-                  {lastPurchaseDate ? format(new Date(lastPurchaseDate), 'yy.MM.dd') : '-'}
+                  {isLastPurchaseDateValid ? format(lastPurchaseDateObj, 'yy.MM.dd') : '-'}
                 </p>
               </div>
               <div className="rounded-lg bg-card p-3">
@@ -143,7 +184,7 @@ export function ProductDetail({
                 const isExpanded = expandedUnits === entryKey
                 const unitLabel = getUnitLabel(entry.unit)
                 const entryLowest = entry.purchaseHistory.length > 0
-                  ? Math.min(...entry.purchaseHistory.map(r => r.price))
+                  ? Math.min(...entry.purchaseHistory.filter(r => r.price > 0).map(r => r.price))
                   : null
                 
                 const currentCount = Math.ceil(entry.quantity / entry.volume)
@@ -228,16 +269,18 @@ export function ProductDetail({
                               return (
                                 <div
                                   key={record.id}
-                                  className={`flex items-center justify-between rounded-lg p-3 ${
+                                  className={`flex items-center justify-between rounded-lg p-3 transition-all ${
                                     isConsumed ? 'bg-secondary/50 opacity-60' : 'bg-secondary'
                                   } ${
-                                    record.price === entryLowest && !isConsumed ? 'ring-1 ring-accent' : ''
+                                    record.price === entryLowest && !isConsumed 
+                                      ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm' 
+                                      : 'border border-transparent'
                                   }`}
                                 >
                                   <div className="flex flex-col">
                                     <div className="flex items-center gap-2">
-                                      <span className={`font-medium ${
-                                        record.price === entryLowest && !isConsumed ? 'text-accent' : 'text-foreground'
+                                      <span className={`font-semibold ${
+                                        record.price === entryLowest && !isConsumed ? 'text-primary' : 'text-foreground'
                                       } ${isConsumed ? 'line-through text-muted-foreground' : ''}`}>
                                         {record.price.toLocaleString('ko-KR')}원
                                       </span>
@@ -261,8 +304,8 @@ export function ProductDetail({
                                         )}
                                       </span>
                                       {record.price === entryLowest && !isConsumed && (
-                                        <Badge variant="secondary" className="text-xs text-accent">
-                                          최저가
+                                        <Badge className="bg-primary text-primary-foreground hover:bg-primary border-none text-[10px] h-5 px-1.5 font-bold uppercase tracking-wider">
+                                          Best
                                         </Badge>
                                       )}
                                     </div>
@@ -284,6 +327,11 @@ export function ProductDetail({
                                         </>
                                       )}
                                     </div>
+                                    {record.memo && (
+                                      <div className="mt-1 text-xs text-muted-foreground bg-card/50 px-2 py-1 rounded">
+                                        {record.memo}
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-1">
                                     {!isConsumed && (

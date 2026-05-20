@@ -14,6 +14,7 @@ import {
   updateStockQuantity,
   useProduct,
   getInventoryData,
+  updateProductSettings,
 } from '@/lib/inventory-store'
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -70,6 +71,20 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  const handleUpdateStock = async (unit: Unit, volume: number, newQuantity: number) => {
+    if (product) {
+      const updated = await updateStockQuantity(product.id, unit, volume, newQuantity)
+      if (updated) setProduct(updated)
+    }
+  }
+
+  const handleUpdateSettings = async (settings: { isHidden?: boolean; ignoreOutOfStock?: boolean }) => {
+    if (product) {
+      const updated = await updateProductSettings(product.id, settings)
+      if (updated) setProduct(updated)
+    }
+  }
+
   const handleEditPurchaseRecord = (record: any) => {
     router.push(`/purchase?editRecordId=${record.id}&productId=${id}`)
   }
@@ -101,6 +116,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         onUpdateStock={handleUpdateStock}
         onUseProduct={handleUseProduct}
         onAddPurchase={handleAddPurchase}
+        onUpdateSettings={handleUpdateSettings}
       />
     </MobileContainer>
   )

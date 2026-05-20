@@ -13,6 +13,7 @@ import {
   getPurchaseRecordById,
   addPurchaseToProduct,
   updatePurchaseRecord,
+  uploadProductImage,
 } from '@/lib/inventory-store'
 
 function PurchaseContent() {
@@ -56,7 +57,14 @@ function PurchaseContent() {
     expirationDate?: string
     site: string
     batches: { count: number; expirationDate?: string }[]
+    imageFile?: File
+    memo?: string
   }) => {
+    let imageUrl = undefined
+    if (data.imageFile) {
+      imageUrl = await uploadProductImage(data.imageFile) || undefined
+    }
+
     if (editingRecord && existingProduct) {
       await updatePurchaseRecord(existingProduct.id, editingRecord.id, {
         productName: data.productName,
@@ -68,6 +76,8 @@ function PurchaseContent() {
         purchaseDate: data.purchaseDate,
         expirationDate: data.expirationDate,
         site: data.site,
+        imageUrl: imageUrl,
+        memo: data.memo,
       })
       router.push(`/product/${existingProduct.id}`)
     } else {
@@ -83,7 +93,9 @@ function PurchaseContent() {
           data.price,
           data.purchaseDate,
           data.site,
-          batch.expirationDate
+          batch.expirationDate,
+          imageUrl,
+          data.memo
         )
         if (i === 0 && p) firstProductId = p.id
       }
@@ -101,6 +113,7 @@ function PurchaseContent() {
 
   return (
     <PurchaseForm
+      key={editRecordId || 'new'}
       existingProduct={existingProduct}
       editingRecord={editingRecord}
       categories={categories}

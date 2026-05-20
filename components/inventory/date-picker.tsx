@@ -50,26 +50,29 @@ export function DatePicker({ date, onDateChange, placeholder = '날짜 선택' }
 
   return (
     <div className="flex gap-2">
-      <Input
-        type="text"
-        value={inputValue}
-        onChange={handleInputChange}
-        placeholder="YYYY-MM-DD"
-        className="bg-card flex-1"
-      />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className={cn(
-              'shrink-0',
-              !date && 'text-muted-foreground'
-            )}
-          >
-            <CalendarIcon className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-1 gap-2">
+            <Input
+              type="text"
+              value={inputValue}
+              onChange={handleInputChange}
+              onFocus={() => setOpen(true)}
+              placeholder="YYYY-MM-DD"
+              className="bg-card flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className={cn(
+                'shrink-0',
+                !date && 'text-muted-foreground'
+              )}
+            >
+              <CalendarIcon className="h-4 w-4" />
+            </Button>
+          </div>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="end">
           <Calendar
