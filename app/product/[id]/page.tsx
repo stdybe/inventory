@@ -23,8 +23,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   const [product, setProduct] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const refreshProduct = () => {
-    const p = getProductById(id)
+  const refreshProduct = async () => {
+    const p = await getProductById(id)
     if (!p) {
       router.push('/')
       return
@@ -33,39 +33,35 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
   }
 
   useEffect(() => {
-    refreshProduct()
-    setIsLoading(false)
+    async function init() {
+      await refreshProduct()
+      setIsLoading(false)
+    }
+    init()
   }, [id])
 
-  const handleDeleteProduct = () => {
+  const handleDeleteProduct = async () => {
     if (product) {
-      deleteProduct(product.id)
+      await deleteProduct(product.id)
       router.push('/')
     }
   }
 
-  const handleDeletePurchaseRecord = (unit: Unit, volume: number, recordId: string) => {
+  const handleDeletePurchaseRecord = async (unit: Unit, volume: number, recordId: string) => {
     if (product) {
-      const updated = deletePurchaseRecord(product.id, unit, volume, recordId)
+      const updated = await deletePurchaseRecord(product.id, unit, volume, recordId)
       if (updated) {
-        refreshProduct()
+        setProduct(updated)
       } else {
         router.push('/')
       }
     }
   }
 
-  const handleUpdateStock = (unit: Unit, volume: number, newQuantity: number) => {
+  const handleUseProduct = async (unit: Unit, volume: number, quantityToUse: number) => {
     if (product) {
-      updateStockQuantity(product.id, unit, volume, newQuantity)
-      refreshProduct()
-    }
-  }
-
-  const handleUseProduct = (unit: Unit, volume: number, quantityToUse: number) => {
-    if (product) {
-      useProduct(product.id, unit, volume, quantityToUse)
-      refreshProduct()
+      const updated = await useProduct(product.id, unit, volume, quantityToUse)
+      setProduct(updated)
 
       toast({
         title: '재고 사용됨',

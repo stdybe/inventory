@@ -27,23 +27,26 @@ function PurchaseContent() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const data = getInventoryData()
-    setCategories(data.categories)
+    async function init() {
+      const data = await getInventoryData()
+      setCategories(data.categories)
 
-    if (productId) {
-      const p = getProductById(productId)
-      if (p) {
-        setExistingProduct(p)
-        if (editRecordId) {
-          const r = getPurchaseRecordById(productId, editRecordId)
-          if (r) setEditingRecord(r)
+      if (productId) {
+        const p = await getProductById(productId)
+        if (p) {
+          setExistingProduct(p)
+          if (editRecordId) {
+            const r = getPurchaseRecordById(p, editRecordId)
+            if (r) setEditingRecord(r)
+          }
         }
       }
+      setIsLoading(false)
     }
-    setIsLoading(false)
+    init()
   }, [productId, editRecordId])
 
-  const handleSave = (data: {
+  const handleSave = async (data: {
     productName: string
     category: string
     unit: Unit
@@ -55,7 +58,7 @@ function PurchaseContent() {
     batches: { count: number; expirationDate?: string }[]
   }) => {
     if (editingRecord && existingProduct) {
-      updatePurchaseRecord(existingProduct.id, editingRecord.id, {
+      await updatePurchaseRecord(existingProduct.id, editingRecord.id, {
         productName: data.productName,
         category: data.category,
         unit: data.unit,
@@ -69,8 +72,9 @@ function PurchaseContent() {
       router.push(`/product/${existingProduct.id}`)
     } else {
       let firstProductId = ''
-      data.batches.forEach((batch, index) => {
-        const p = addPurchaseToProduct(
+      for (let i = 0; i < data.batches.length; i++) {
+        const batch = data.batches[i]
+        const p = await addPurchaseToProduct(
           data.productName,
           data.category,
           data.unit,
@@ -81,8 +85,8 @@ function PurchaseContent() {
           data.site,
           batch.expirationDate
         )
-        if (index === 0) firstProductId = p.id
-      })
+        if (i === 0 && p) firstProductId = p.id
+      }
       router.push(firstProductId ? `/product/${firstProductId}` : '/')
     }
   }

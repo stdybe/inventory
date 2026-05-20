@@ -25,11 +25,30 @@ export default function InventoryPage() {
   const [stockFilter, setStockFilter] = useState('all')
 
   useEffect(() => {
-    const data = getInventoryData()
-    setProducts(data.products)
-    setCategories(data.categories)
-    setIsLoading(false)
-  }, [])
+    async function fetchData() {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        router.push('/login')
+        return
+      }
+
+      const data = await getInventoryData()
+      setProducts(data.products)
+      setCategories(data.categories)
+      setIsLoading(false)
+    }
+    fetchData()
+  }, [router])
+
+  const handleLogout = async () => {
+    const { createClient } = await import('@/lib/supabase/client')
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -82,9 +101,14 @@ export default function InventoryPage() {
                 </div>
                 <h1 className="text-xl font-semibold text-foreground">Inventory</h1>
               </div>
-              <Button size="icon" onClick={handleAddNew}>
-                <Plus className="h-5 w-5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={handleLogout}>
+                  로그아웃
+                </Button>
+                <Button size="icon" onClick={handleAddNew}>
+                  <Plus className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
           </header>
 

@@ -119,12 +119,12 @@ export function PurchaseForm({ existingProduct, editingRecord, categories, onSav
     }
   }, [existingProduct, category])
 
-  const handleProductNameChange = (value: string) => {
+  const handleProductNameChange = async (value: string) => {
     setProductName(value)
     setSelectedExisting(null)
     
     if (value.trim().length >= 1) {
-      const results = searchProductsByName(value)
+      const results = await searchProductsByName(value)
       setSuggestions(results)
       setShowSuggestions(results.length > 0)
     } else {
