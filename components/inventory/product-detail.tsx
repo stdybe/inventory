@@ -459,26 +459,15 @@ export function ProductDetail({
                                   </div>
                                   <div className="flex items-center gap-1">
                                     {!isConsumed && (
-                                      <>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-primary hover:bg-primary/10"
-                                          title="사용 시작"
-                                          onClick={() => onUseProduct(record.unit, record.volume, record.volume, record.id, 'in_use')}
-                                        >
-                                          <Play className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
-                                          title="즉시 사용"
-                                          onClick={() => onUseProduct(record.unit, record.volume, record.volume, record.id, 'completed')}
-                                        >
-                                          <Minus className="h-4 w-4" />
-                                        </Button>
-                                      </>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-primary hover:bg-primary/10"
+                                        title="사용 시작"
+                                        onClick={() => onUseProduct(record.unit, record.volume, record.volume, record.id, 'in_use')}
+                                      >
+                                        <Play className="h-4 w-4" />
+                                      </Button>
                                     )}
                                     <Button
                                       variant="ghost"
