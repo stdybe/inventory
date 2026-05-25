@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { X, Trash2, TrendingDown, Package, ChevronDown, ChevronUp, Plus, Pencil, Minus, CalendarX, EyeOff, Eye, BellOff, Bell } from 'lucide-react'
-import { Product, StockEntry, Unit, getLowestPriceInfo, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, PurchaseRecord, getUnitLabel } from '@/lib/inventory-store'
+import { X, Trash2, TrendingDown, Package, ChevronDown, ChevronUp, Plus, Pencil, Minus, CalendarX, EyeOff, Eye, BellOff, Bell, RotateCcw, History, Filter, List } from 'lucide-react'
+import { Product, StockEntry, Unit, getLowestPriceInfo, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, PurchaseRecord, getUnitLabel, UsageRecord } from '@/lib/inventory-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +27,8 @@ interface ProductDetailProps {
   onDeletePurchaseRecord: (unit: Unit, volume: number, recordId: string) => void
   onEditPurchaseRecord: (record: PurchaseRecord) => void
   onUpdateStock: (unit: Unit, volume: number, newQuantity: number) => void
-  onUseProduct: (unit: Unit, volume: number, quantityToUse: number) => void
+  onUseProduct: (unit: Unit, volume: number, quantityToUse: number, recordId?: string) => void
+  onCancelUsage: (usageId: string) => void
   onAddPurchase: () => void
   onUpdateSettings: (settings: { isHidden?: boolean; ignoreOutOfStock?: boolean }) => void
 }
@@ -40,11 +41,14 @@ export function ProductDetail({
   onEditPurchaseRecord,
   onUpdateStock,
   onUseProduct,
+  onCancelUsage,
   onAddPurchase,
   onUpdateSettings,
 }: ProductDetailProps) {
   const [expandedUnits, setExpandedUnits] = useState<string>('')
   const [editingStock, setEditingStock] = useState<{ unit: Unit; volume: number; value: string } | null>(null)
+  const [showUsageHistory, setShowUsageHistory] = useState(false)
+  const [hideConsumed, setHideConsumed] = useState(true)
 
   const lowestPriceInfo = getLowestPriceInfo(product)
   const lastPurchaseDate = getLastPurchaseDate(product)
@@ -53,6 +57,9 @@ export function ProductDetail({
 
   const lastPurchaseDateObj = lastPurchaseDate ? new Date(lastPurchaseDate) : null
   const isLastPurchaseDateValid = lastPurchaseDateObj && !isNaN(lastPurchaseDateObj.getTime())
+
+  const lastUsedAtObj = product.lastUsedAt ? new Date(product.lastUsedAt) : null
+  const isLastUsedAtValid = lastUsedAtObj && !isNaN(lastUsedAtObj.getTime())
 
   const getEntryKey = (unit: Unit, volume: number) => `${unit}-${volume}`
 
@@ -77,6 +84,11 @@ export function ProductDetail({
     return Number.isInteger(quantity) ? quantity.toString() : quantity.toFixed(2)
   }
 
+  const allPurchaseRecords = product.stockEntries.flatMap(e => e.purchaseHistory)
+  const consumedPurchaseIds = new Set(
+    allPurchaseRecords.filter(r => r.remainingQuantity <= 0).map(r => r.id)
+  )
+
   return (
     <div className="flex h-screen flex-col bg-background">
       <header className="flex items-center justify-between border-b border-border px-4 py-4">
@@ -85,6 +97,15 @@ export function ProductDetail({
           </button>
           <h1 className="text-lg font-semibold text-foreground">상품 상세</h1>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setHideConsumed(!hideConsumed)}
+              className={hideConsumed ? 'text-primary' : 'text-muted-foreground'}
+              title={hideConsumed ? '모든 기록 보기' : '소진된 기록 숨기기'}
+            >
+              {hideConsumed ? <Filter className="h-5 w-5" /> : <List className="h-5 w-5" />}
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -160,9 +181,9 @@ export function ProductDetail({
                 </p>
               </div>
               <div className="rounded-lg bg-card p-3">
-                <p className="text-xs text-muted-foreground">누적 구매총액</p>
+                <p className="text-xs text-muted-foreground">마지막 사용일</p>
                 <p className="text-lg font-semibold text-foreground">
-                  {totalPurchaseValue.toLocaleString('ko-KR')}원
+                  {isLastUsedAtValid ? format(lastUsedAtObj, 'yy.MM.dd') : '-'}
                 </p>
               </div>
             </div>
@@ -243,11 +264,24 @@ export function ProductDetail({
                     {/* Purchase History */}
                     {isExpanded && (
                       <div className="border-t border-border px-4 pb-4">
-                        <p className="py-3 text-sm font-medium text-muted-foreground">
-                          구매 내역 ({entry.purchaseHistory.length})
-                        </p>
+                        <div className="flex items-center justify-between py-3">
+                          <p className="text-sm font-medium text-muted-foreground">
+                            구매 내역 ({entry.purchaseHistory.filter(r => !hideConsumed || r.remainingQuantity > 0).length})
+                          </p>
+                          {hideConsumed && entry.purchaseHistory.some(r => r.remainingQuantity <= 0) && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 text-xs text-primary"
+                              onClick={() => setHideConsumed(false)}
+                            >
+                              소진된 {entry.purchaseHistory.filter(r => r.remainingQuantity <= 0).length}개 더보기
+                            </Button>
+                          )}
+                        </div>
                         <div className="flex flex-col gap-2">
                           {[...entry.purchaseHistory]
+                            .filter(record => !hideConsumed || record.remainingQuantity > 0)
                             .sort((a, b) => {
                               // If both have expiration dates, sort by expiration date (earliest first)
                               if (a.expirationDate && b.expirationDate) {
@@ -339,7 +373,7 @@ export function ProductDetail({
                                         variant="ghost"
                                         size="icon"
                                         className="h-8 w-8 text-primary hover:bg-primary/10"
-                                        onClick={() => onUseProduct(record.unit, record.volume, record.volume)}
+                                        onClick={() => onUseProduct(record.unit, record.volume, record.volume, record.id)}
                                       >
                                         <Minus className="h-4 w-4" />
                                       </Button>
@@ -390,6 +424,81 @@ export function ProductDetail({
                 )
               })}
             </div>
+          </div>
+
+          {/* Usage History */}
+          <div className="border-t border-border p-4">
+            <button
+              onClick={() => setShowUsageHistory(!showUsageHistory)}
+              className="flex w-full items-center justify-between py-2 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-medium text-foreground">최근 사용 기록</h3>
+              </div>
+              {showUsageHistory ? (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              )}
+            </button>
+
+            {showUsageHistory && (
+              <div className="mt-3 flex flex-col gap-2">
+                {product.usageHistory.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">사용 기록이 없습니다.</p>
+                ) : (
+                  <>
+                    {product.usageHistory
+                      .filter(usage => !hideConsumed || !consumedPurchaseIds.has(usage.purchaseRecordId))
+                      .map((usage) => {
+                        const record = product.stockEntries
+                          .flatMap(e => e.purchaseHistory)
+                          .find(r => r.id === usage.purchaseRecordId)
+                        
+                        return (
+                          <div key={usage.id} className="flex items-center justify-between rounded-lg bg-secondary p-3">
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground">
+                                  {usage.quantity}{getUnitLabel(record?.unit || 'pcs')} 사용
+                                </span>
+                                {record && (
+                                  <span className="text-xs text-muted-foreground">
+                                    ({record.price.toLocaleString()}원 상품)
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {format(new Date(usage.usedAt), 'yyyy.MM.dd HH:mm', { locale: ko })}
+                              </span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs text-muted-foreground hover:text-primary"
+                              onClick={() => onCancelUsage(usage.id)}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              취소
+                            </Button>
+                          </div>
+                        )
+                      })}
+                    {hideConsumed && product.usageHistory.some(usage => consumedPurchaseIds.has(usage.purchaseRecordId)) && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="w-full text-xs text-muted-foreground"
+                        onClick={() => setHideConsumed(false)}
+                      >
+                        소진된 항목의 사용 기록 더보기
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

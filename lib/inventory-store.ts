@@ -72,6 +72,14 @@ export interface PurchaseRecord {
   createdAt: string
 }
 
+export interface UsageRecord {
+  id: string
+  productId: string
+  purchaseRecordId: string
+  quantity: number
+  usedAt: string
+}
+
 export interface StockEntry {
   unit: Unit
   volume: number
@@ -87,6 +95,8 @@ export interface Product {
   isHidden: boolean
   ignoreOutOfStock: boolean
   stockEntries: StockEntry[]
+  usageHistory: UsageRecord[]
+  lastUsedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -113,6 +123,15 @@ function mapProduct(p: any): Product {
     memo: r.memo,
     createdAt: r.created_at,
     }))
+  
+  const usageHistory: UsageRecord[] = (p.usage_logs || []).map((u: any) => ({
+    id: u.id,
+    productId: u.product_id,
+    purchaseRecordId: u.purchase_record_id,
+    quantity: u.quantity,
+    usedAt: u.used_at,
+  })).sort((a: UsageRecord, b: UsageRecord) => new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime())
+
   const stockEntriesMap = new Map<string, StockEntry>()
   records.forEach(r => {
     const key = `${r.unit}-${r.volume}`
@@ -137,6 +156,8 @@ function mapProduct(p: any): Product {
     isHidden: p.is_hidden || false,
     ignoreOutOfStock: p.ignore_out_of_stock || false,
     stockEntries: Array.from(stockEntriesMap.values()),
+    usageHistory,
+    lastUsedAt: usageHistory[0]?.usedAt,
     createdAt: p.created_at,
     updatedAt: p.updated_at,
   }
@@ -148,7 +169,7 @@ export async function searchProductsByName(query: string): Promise<Product[]> {
   
   const { data: productsData, error } = await supabase
     .from('products')
-    .select('*, purchase_records(*)')
+    .select('*, purchase_records(*), usage_logs(*)')
     .ilike('name', `%${query}%`)
     .order('name')
 
@@ -164,7 +185,7 @@ export async function getInventoryData(): Promise<InventoryStore> {
 
   const { data: productsData, error: productsError } = await supabase
     .from('products')
-    .select('*, purchase_records(*)')
+    .select('*, purchase_records(*), usage_logs(*)')
     .order('name')
 
   if (productsError) {
@@ -193,7 +214,7 @@ export async function getProductById(id: string): Promise<Product | undefined> {
   const supabase = createClient()
   const { data: p, error } = await supabase
     .from('products')
-    .select('*, purchase_records(*)')
+    .select('*, purchase_records(*), usage_logs(*)')
     .eq('id', id)
     .single()
 
@@ -309,21 +330,36 @@ export async function useProduct(
   productId: string,
   unit: Unit,
   volume: number,
-  quantityToUse: number
+  quantityToUse: number,
+  purchaseRecordId?: string
 ): Promise<Product | null> {
   const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
   
-  // Fetch records for this unit/volume, ordered by purchase date (FIFO)
-  const { data: records, error } = await supabase
-    .from('purchase_records')
-    .select('*')
-    .eq('product_id', productId)
-    .eq('unit', unit)
-    .eq('volume', volume)
-    .gt('remaining_quantity', 0)
-    .order('purchase_date', { ascending: true })
+  let records = []
+  
+  if (purchaseRecordId) {
+    const { data: record, error } = await supabase
+      .from('purchase_records')
+      .select('*')
+      .eq('id', purchaseRecordId)
+      .single()
+    if (!error && record) records = [record]
+  } else {
+    // Fetch records for this unit/volume, ordered by purchase date (FIFO)
+    const { data: fetchRecords, error } = await supabase
+      .from('purchase_records')
+      .select('*')
+      .eq('product_id', productId)
+      .eq('unit', unit)
+      .eq('volume', volume)
+      .gt('remaining_quantity', 0)
+      .order('purchase_date', { ascending: true })
+    if (!error && fetchRecords) records = fetchRecords
+  }
 
-  if (error || !records) return null
+  if (records.length === 0) return null
 
   let remainingToUse = quantityToUse
   for (const record of records) {
@@ -336,9 +372,53 @@ export async function useProduct(
       .from('purchase_records')
       .update({ remaining_quantity: newRemaining })
       .eq('id', record.id)
+    
+    // Log usage
+    await supabase.from('usage_logs').insert({
+      product_id: productId,
+      purchase_record_id: record.id,
+      quantity: amountToSubtract,
+      user_id: user.id
+    })
       
     remainingToUse -= amountToSubtract
   }
+
+  return getProductById(productId) as any
+}
+
+export async function cancelUsage(
+  productId: string,
+  usageId: string
+): Promise<Product | null> {
+  const supabase = createClient()
+  
+  // 1. Get usage log
+  const { data: usage, error: usageError } = await supabase
+    .from('usage_logs')
+    .select('*')
+    .eq('id', usageId)
+    .single()
+  
+  if (usageError || !usage) return null
+
+  // 2. Get purchase record
+  const { data: record, error: recordError } = await supabase
+    .from('purchase_records')
+    .select('remaining_quantity')
+    .eq('id', usage.purchase_record_id)
+    .single()
+  
+  if (recordError || !record) return null
+
+  // 3. Revert quantity
+  await supabase
+    .from('purchase_records')
+    .update({ remaining_quantity: record.remaining_quantity + usage.quantity })
+    .eq('id', usage.purchase_record_id)
+  
+  // 4. Delete usage log
+  await supabase.from('usage_logs').delete().eq('id', usageId)
 
   return getProductById(productId) as any
 }
@@ -358,17 +438,6 @@ export async function deletePurchaseRecord(
   const supabase = createClient()
   const { error } = await supabase.from('purchase_records').delete().eq('id', purchaseRecordId)
   if (error) return null
-
-  // Check if product still has records
-  const { count } = await supabase
-    .from('purchase_records')
-    .select('*', { count: 'exact', head: true })
-    .eq('product_id', productId)
-
-  if (count === 0) {
-    await deleteProduct(productId)
-    return null
-  }
 
   return getProductById(productId) as any
 }

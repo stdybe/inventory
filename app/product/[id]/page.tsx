@@ -13,6 +13,7 @@ import {
   deletePurchaseRecord,
   updateStockQuantity,
   useProduct,
+  cancelUsage,
   getInventoryData,
   updateProductSettings,
 } from '@/lib/inventory-store'
@@ -59,14 +60,26 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const handleUseProduct = async (unit: Unit, volume: number, quantityToUse: number) => {
+  const handleUseProduct = async (unit: Unit, volume: number, quantityToUse: number, recordId?: string) => {
     if (product) {
-      const updated = await useProduct(product.id, unit, volume, quantityToUse)
+      const updated = await useProduct(product.id, unit, volume, quantityToUse, recordId)
       setProduct(updated)
 
       toast({
         title: '재고 사용됨',
         description: `${product.name} 재고가 차감되었습니다.`,
+      })
+    }
+  }
+
+  const handleCancelUsage = async (usageId: string) => {
+    if (product) {
+      const updated = await cancelUsage(product.id, usageId)
+      setProduct(updated)
+
+      toast({
+        title: '사용 취소됨',
+        description: '제품 사용 기록이 취소되고 재고가 복구되었습니다.',
       })
     }
   }
@@ -115,6 +128,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         onEditPurchaseRecord={handleEditPurchaseRecord}
         onUpdateStock={handleUpdateStock}
         onUseProduct={handleUseProduct}
+        onCancelUsage={handleCancelUsage}
         onAddPurchase={handleAddPurchase}
         onUpdateSettings={handleUpdateSettings}
       />
