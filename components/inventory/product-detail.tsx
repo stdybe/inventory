@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { X, Trash2, TrendingDown, Package, ChevronDown, ChevronUp, Plus, Pencil, Minus, CalendarX, EyeOff, Eye, BellOff, Bell, RotateCcw, History, Filter, List } from 'lucide-react'
+import { X, Trash2, TrendingDown, Package, ChevronDown, ChevronUp, Plus, Pencil, Minus, CalendarX, EyeOff, Eye, BellOff, Bell, RotateCcw, History, Filter, List, Play, Check } from 'lucide-react'
 import { Product, StockEntry, Unit, getLowestPriceInfo, getLastPurchaseDate, getTotalPurchaseValue, getTotalCount, PurchaseRecord, getUnitLabel, UsageRecord } from '@/lib/inventory-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,8 +27,11 @@ interface ProductDetailProps {
   onDeletePurchaseRecord: (unit: Unit, volume: number, recordId: string) => void
   onEditPurchaseRecord: (record: PurchaseRecord) => void
   onUpdateStock: (unit: Unit, volume: number, newQuantity: number) => void
-  onUseProduct: (unit: Unit, volume: number, quantityToUse: number, recordId?: string) => void
+  onUseProduct: (unit: Unit, volume: number, quantityToUse: number, recordId?: string, status?: 'in_use' | 'completed', memo?: string) => void
   onCancelUsage: (usageId: string) => void
+  onCompleteUsage: (usageId: string) => void
+  onUpdateUsageMemo: (usageId: string, memo: string) => void
+  onUpdateUsageProgress: (usageId: string, progress: number) => void
   onAddPurchase: () => void
   onUpdateSettings: (settings: { isHidden?: boolean; ignoreOutOfStock?: boolean }) => void
 }
@@ -42,6 +45,9 @@ export function ProductDetail({
   onUpdateStock,
   onUseProduct,
   onCancelUsage,
+  onCompleteUsage,
+  onUpdateUsageMemo,
+  onUpdateUsageProgress,
   onAddPurchase,
   onUpdateSettings,
 }: ProductDetailProps) {
@@ -188,6 +194,90 @@ export function ProductDetail({
               </div>
             </div>
           </div>
+
+          {/* In Use Section */}
+          {product.usageHistory.some(u => u.status === 'in_use') && (
+            <div className="p-4 border-b border-border bg-primary/5">
+              <h3 className="font-medium text-primary mb-3 flex items-center gap-2">
+                <Play className="h-4 w-4 fill-primary" />
+                현재 사용 중
+              </h3>
+              <div className="flex flex-col gap-2">
+                {product.usageHistory.filter(u => u.status === 'in_use').map(usage => {
+                  const record = product.stockEntries.flatMap(e => e.purchaseHistory).find(r => r.id === usage.purchaseRecordId)
+                  return (
+                    <div key={usage.id} className="rounded-lg bg-background border border-primary/20 p-3 shadow-sm flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground">
+                            {usage.quantity}{getUnitLabel(record?.unit || 'pcs')}
+                          </span>
+                          {record && <span className="text-xs text-muted-foreground">({record.price.toLocaleString()}원 상품)</span>}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(usage.startedAt || usage.usedAt), 'yy.MM.dd 시작', { locale: ko })}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="메모를 남겨주세요"
+                            defaultValue={usage.memo || ''}
+                            className="h-8 text-xs flex-1"
+                            onBlur={(e) => {
+                              if (e.target.value !== usage.memo) {
+                                onUpdateUsageMemo(usage.id, e.target.value)
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            className="h-8 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                            onClick={() => onCompleteUsage(usage.id)}
+                          >
+                            다 씀
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => onCancelUsage(usage.id)}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        
+                        {/* Progress Control */}
+                        <div className="flex flex-col gap-1.5 mt-1">
+                          <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1">
+                            <span>사용량</span>
+                            <span className="font-medium text-primary">{(usage.progress || 0)}%</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
+                              <button
+                                key={p}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onUpdateUsageProgress(usage.id, p)
+                                }}
+                                className={`h-2 flex-1 rounded-full transition-all active:scale-95 ${
+                                  (usage.progress || 0) >= p 
+                                    ? 'bg-primary shadow-[0_0_8px_rgba(var(--primary),0.4)]' 
+                                    : 'bg-secondary dark:bg-muted/30 hover:bg-primary/30'
+                                }`}
+                                title={`${p}% 사용됨`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Stock by Unit */}
           <div className="p-4">
@@ -369,14 +459,26 @@ export function ProductDetail({
                                   </div>
                                   <div className="flex items-center gap-1">
                                     {!isConsumed && (
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-primary hover:bg-primary/10"
-                                        onClick={() => onUseProduct(record.unit, record.volume, record.volume, record.id)}
-                                      >
-                                        <Minus className="h-4 w-4" />
-                                      </Button>
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-primary hover:bg-primary/10"
+                                          title="사용 시작"
+                                          onClick={() => onUseProduct(record.unit, record.volume, record.volume, record.id, 'in_use')}
+                                        >
+                                          <Play className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
+                                          title="즉시 사용"
+                                          onClick={() => onUseProduct(record.unit, record.volume, record.volume, record.id, 'completed')}
+                                        >
+                                          <Minus className="h-4 w-4" />
+                                        </Button>
+                                      </>
                                     )}
                                     <Button
                                       variant="ghost"
@@ -396,23 +498,23 @@ export function ProductDetail({
                                           <Trash2 className="h-4 w-4" />
                                         </Button>
                                       </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>구매 기록 삭제</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          이 구매 기록을 삭제하면 재고에서 {formatQuantity(record.remainingQuantity)} {recordUnitLabel}가 차감됩니다.
-                                        </AlertDialogDescription>                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>취소</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() => onDeletePurchaseRecord(record.unit, record.volume, record.id)}
-                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                        >
-                                          삭제
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>구매 기록 삭제</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            이 구매 기록을 삭제하면 재고에서 {formatQuantity(record.remainingQuantity)} {recordUnitLabel}가 차감됩니다.
+                                          </AlertDialogDescription>                                      </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>취소</AlertDialogCancel>
+                                          <AlertDialogAction
+                                            onClick={() => onDeletePurchaseRecord(record.unit, record.volume, record.id)}
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                          >
+                                            삭제
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
                                   </div>
                                 </div>
                               )
@@ -445,11 +547,12 @@ export function ProductDetail({
 
             {showUsageHistory && (
               <div className="mt-3 flex flex-col gap-2">
-                {product.usageHistory.length === 0 ? (
+                {product.usageHistory.filter(u => u.status === 'completed').length === 0 ? (
                   <p className="py-4 text-center text-sm text-muted-foreground">사용 기록이 없습니다.</p>
                 ) : (
                   <>
                     {product.usageHistory
+                      .filter(u => u.status === 'completed')
                       .filter(usage => !hideConsumed || !consumedPurchaseIds.has(usage.purchaseRecordId))
                       .map((usage) => {
                         const record = product.stockEntries
@@ -457,7 +560,7 @@ export function ProductDetail({
                           .find(r => r.id === usage.purchaseRecordId)
                         
                         return (
-                          <div key={usage.id} className="flex items-center justify-between rounded-lg bg-secondary/50 p-3">
+                          <div key={usage.id} className="flex items-center justify-between rounded-lg bg-muted/50 dark:bg-muted/30 p-3">
                             <div className="flex flex-col">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-foreground">
@@ -476,7 +579,7 @@ export function ProductDetail({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 text-xs text-muted-foreground hover:text-primary"
+                              className="h-8 text-xs text-muted-foreground hover:text-primary hover:bg-background/50"
                               onClick={() => onCancelUsage(usage.id)}
                             >
                               <RotateCcw className="h-3 w-3 mr-1" />
@@ -485,11 +588,11 @@ export function ProductDetail({
                           </div>
                         )
                       })}
-                    {hideConsumed && product.usageHistory.some(usage => consumedPurchaseIds.has(usage.purchaseRecordId)) && (
+                    {hideConsumed && product.usageHistory.filter(u => u.status === 'completed').some(usage => consumedPurchaseIds.has(usage.purchaseRecordId)) && (
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        className="w-full text-xs text-muted-foreground"
+                        className="w-full text-xs text-muted-foreground hover:bg-muted/50"
                         onClick={() => setHideConsumed(false)}
                       >
                         소진된 항목의 사용 기록 더보기
@@ -500,6 +603,7 @@ export function ProductDetail({
               </div>
             )}
           </div>
+
         </div>
 
         {/* Delete Product Button */}

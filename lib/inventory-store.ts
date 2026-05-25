@@ -78,6 +78,10 @@ export interface UsageRecord {
   purchaseRecordId: string
   quantity: number
   usedAt: string
+  status: 'in_use' | 'completed'
+  memo?: string
+  startedAt?: string
+  progress?: number
 }
 
 export interface StockEntry {
@@ -130,6 +134,10 @@ function mapProduct(p: any): Product {
     purchaseRecordId: u.purchase_record_id,
     quantity: u.quantity,
     usedAt: u.used_at,
+    status: u.status || 'completed',
+    memo: u.memo,
+    startedAt: u.started_at,
+    progress: u.progress || 0,
   })).sort((a: UsageRecord, b: UsageRecord) => new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime())
 
   const stockEntriesMap = new Map<string, StockEntry>()
@@ -331,7 +339,9 @@ export async function useProduct(
   unit: Unit,
   volume: number,
   quantityToUse: number,
-  purchaseRecordId?: string
+  purchaseRecordId?: string,
+  status: 'in_use' | 'completed' = 'completed',
+  memo?: string
 ): Promise<Product | null> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -378,7 +388,10 @@ export async function useProduct(
       product_id: productId,
       purchase_record_id: record.id,
       quantity: amountToSubtract,
-      user_id: user.id
+      user_id: user.id,
+      status,
+      memo,
+      started_at: status === 'in_use' ? new Date().toISOString() : undefined
     })
       
     remainingToUse -= amountToSubtract
@@ -386,6 +399,31 @@ export async function useProduct(
 
   return getProductById(productId) as any
 }
+
+export async function completeUsage(productId: string, usageId: string): Promise<Product | null> {
+  const supabase = createClient()
+  await supabase.from('usage_logs').update({
+    status: 'completed',
+    used_at: new Date().toISOString()
+  }).eq('id', usageId)
+  
+  return getProductById(productId) as any
+}
+
+export async function updateUsageMemo(productId: string, usageId: string, memo: string): Promise<Product | null> {
+  const supabase = createClient()
+  await supabase.from('usage_logs').update({ memo }).eq('id', usageId)
+  
+  return getProductById(productId) as any
+}
+
+export async function updateUsageProgress(productId: string, usageId: string, progress: number): Promise<Product | null> {
+  const supabase = createClient()
+  await supabase.from('usage_logs').update({ progress }).eq('id', usageId)
+  
+  return getProductById(productId) as any
+}
+
 
 export async function cancelUsage(
   productId: string,

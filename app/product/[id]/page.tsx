@@ -14,6 +14,9 @@ import {
   updateStockQuantity,
   useProduct,
   cancelUsage,
+  completeUsage,
+  updateUsageMemo,
+  updateUsageProgress,
   getInventoryData,
   updateProductSettings,
 } from '@/lib/inventory-store'
@@ -60,15 +63,22 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const handleUseProduct = async (unit: Unit, volume: number, quantityToUse: number, recordId?: string) => {
+  const handleUseProduct = async (unit: Unit, volume: number, quantityToUse: number, recordId?: string, status: 'in_use' | 'completed' = 'completed', memo?: string) => {
     if (product) {
-      const updated = await useProduct(product.id, unit, volume, quantityToUse, recordId)
+      const updated = await useProduct(product.id, unit, volume, quantityToUse, recordId, status, memo)
       setProduct(updated)
 
-      toast({
-        title: '재고 사용됨',
-        description: `${product.name} 재고가 차감되었습니다.`,
-      })
+      if (status === 'completed') {
+        toast({
+          title: '재고 사용됨',
+          description: `${product.name} 재고가 차감되었습니다.`,
+        })
+      } else {
+        toast({
+          title: '사용 시작',
+          description: `${product.name} 사용을 시작합니다.`,
+        })
+      }
     }
   }
 
@@ -81,6 +91,32 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         title: '사용 취소됨',
         description: '제품 사용 기록이 취소되고 재고가 복구되었습니다.',
       })
+    }
+  }
+
+  const handleCompleteUsage = async (usageId: string) => {
+    if (product) {
+      const updated = await completeUsage(product.id, usageId)
+      setProduct(updated)
+
+      toast({
+        title: '사용 완료',
+        description: '사용 내역이 기록되었습니다.',
+      })
+    }
+  }
+
+  const handleUpdateUsageMemo = async (usageId: string, memo: string) => {
+    if (product) {
+      const updated = await updateUsageMemo(product.id, usageId, memo)
+      setProduct(updated)
+    }
+  }
+
+  const handleUpdateUsageProgress = async (usageId: string, progress: number) => {
+    if (product) {
+      const updated = await updateUsageProgress(product.id, usageId, progress)
+      setProduct(updated)
     }
   }
 
@@ -129,6 +165,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         onUpdateStock={handleUpdateStock}
         onUseProduct={handleUseProduct}
         onCancelUsage={handleCancelUsage}
+        onCompleteUsage={handleCompleteUsage}
+        onUpdateUsageMemo={handleUpdateUsageMemo}
+        onUpdateUsageProgress={handleUpdateUsageProgress}
         onAddPurchase={handleAddPurchase}
         onUpdateSettings={handleUpdateSettings}
       />
