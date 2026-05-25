@@ -17,7 +17,6 @@ import {
   completeUsage,
   updateUsageMemo,
   updateUsageProgress,
-  getInventoryData,
   updateProductSettings,
 } from '@/lib/inventory-store'
 
