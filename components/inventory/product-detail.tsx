@@ -457,7 +457,7 @@ export function ProductDetail({
                           .find(r => r.id === usage.purchaseRecordId)
                         
                         return (
-                          <div key={usage.id} className="flex items-center justify-between rounded-lg bg-secondary p-3">
+                          <div key={usage.id} className="flex items-center justify-between rounded-lg bg-secondary/50 p-3">
                             <div className="flex flex-col">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-foreground">
